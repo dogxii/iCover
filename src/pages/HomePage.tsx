@@ -2,9 +2,26 @@ import { useCallback, useState } from "react";
 import { ImageDropZone } from "../components/molecules/ImageDropZone";
 import { ConfigPanel } from "../components/molecules/ConfigPanel";
 import { PreviewCanvas } from "../components/molecules/PreviewCanvas";
+import {
+  PresetGallery,
+  detectActivePreset,
+} from "../components/molecules/PresetGallery";
 import { useImageUpload } from "../hooks/useImageUpload";
-import type { ExportConfig, SplitConfig } from "../types";
-import { DEFAULT_EXPORT_CONFIG, DEFAULT_SPLIT_CONFIG } from "../types";
+import type {
+  BackgroundConfig,
+  ExportConfig,
+  MockupConfig,
+  PresetTemplate,
+  SplitConfig,
+  WatermarkConfig,
+} from "../types";
+import {
+  DEFAULT_BACKGROUND_CONFIG,
+  DEFAULT_EXPORT_CONFIG,
+  DEFAULT_MOCKUP_CONFIG,
+  DEFAULT_SPLIT_CONFIG,
+  DEFAULT_WATERMARK_CONFIG,
+} from "../types";
 
 // ─── Section Card ─────────────────────────────────────────────────────────────
 
@@ -69,6 +86,9 @@ function StepBadge({ step, label }: { step: number; label: string }) {
 
 export function HomePage() {
   const [splitConfig, setSplitConfig] = useState<SplitConfig>(DEFAULT_SPLIT_CONFIG);
+  const [background, setBackground] = useState<BackgroundConfig>(DEFAULT_BACKGROUND_CONFIG);
+  const [mockup, setMockup] = useState<MockupConfig>(DEFAULT_MOCKUP_CONFIG);
+  const [watermark, setWatermark] = useState<WatermarkConfig>(DEFAULT_WATERMARK_CONFIG);
   const [exportConfig, setExportConfig] = useState<ExportConfig>(DEFAULT_EXPORT_CONFIG);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -89,6 +109,27 @@ export function HomePage() {
     []
   );
 
+  const handleBackgroundChange = useCallback(
+    <K extends keyof BackgroundConfig>(key: K, value: BackgroundConfig[K]) => {
+      setBackground((prev) => ({ ...prev, [key]: value }));
+    },
+    []
+  );
+
+  const handleMockupChange = useCallback(
+    <K extends keyof MockupConfig>(key: K, value: MockupConfig[K]) => {
+      setMockup((prev) => ({ ...prev, [key]: value }));
+    },
+    []
+  );
+
+  const handleWatermarkChange = useCallback(
+    <K extends keyof WatermarkConfig>(key: K, value: WatermarkConfig[K]) => {
+      setWatermark((prev) => ({ ...prev, [key]: value }));
+    },
+    []
+  );
+
   const handleExportChange = useCallback(
     <K extends keyof ExportConfig>(key: K, value: ExportConfig[K]) => {
       setExportConfig((prev) => ({ ...prev, [key]: value }));
@@ -96,12 +137,20 @@ export function HomePage() {
     []
   );
 
+  const handleApplyPreset = useCallback((preset: PresetTemplate) => {
+    setSplitConfig(preset.splitConfig);
+    setBackground(preset.background);
+    setMockup(preset.mockup);
+    setWatermark(preset.watermark);
+  }, []);
+
+  const activePresetId = detectActivePreset(splitConfig, background, mockup, watermark);
   const hasBoth = !!images.light && !!images.dark;
 
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 animate-slide-up">
       {/* ── Hero tagline ──────────────────────────────────────────────────── */}
-      <div className="mb-6 flex flex-col gap-1 select-none">
+      <div className="mb-5 flex flex-col gap-1 select-none">
         <h1 className="text-xl font-bold text-[var(--color-text)] tracking-tight leading-tight">
           生成炫酷的 README 封面图
         </h1>
@@ -110,8 +159,16 @@ export function HomePage() {
         </p>
       </div>
 
+      {/* ── Preset Gallery ────────────────────────────────────────────────── */}
+      <div className="mb-5">
+        <PresetGallery
+          activePresetId={activePresetId}
+          onApply={handleApplyPreset}
+        />
+      </div>
+
       {/* ── Main layout ───────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[320px_220px_1fr] gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[300px_240px_1fr] gap-4 items-start">
 
         {/* ── Column 1: Upload ──────────────────────────────────────────── */}
         <div className="flex flex-col gap-4">
@@ -159,8 +216,14 @@ export function HomePage() {
             <SectionCard noPadding>
               <ConfigPanel
                 splitConfig={splitConfig}
+                background={background}
+                mockup={mockup}
+                watermark={watermark}
                 exportConfig={exportConfig}
                 onSplitChange={handleSplitChange}
+                onBackgroundChange={handleBackgroundChange}
+                onMockupChange={handleMockupChange}
+                onWatermarkChange={handleWatermarkChange}
                 onExportChange={handleExportChange}
                 disabled={!hasBoth}
               />
@@ -171,12 +234,15 @@ export function HomePage() {
         {/* ── Column 3: Preview + Export ────────────────────────────────── */}
         <div className="flex flex-col gap-4 lg:sticky lg:top-[calc(56px+1.5rem)]">
           <div>
-            <StepBadge step={3} label="预览 &amp; 导出" />
+            <StepBadge step={3} label="预览 & 导出" />
             <SectionCard noPadding>
               <div className="p-4">
                 <PreviewCanvas
                   images={images}
                   splitConfig={splitConfig}
+                  background={background}
+                  mockup={mockup}
+                  watermark={watermark}
                   exportConfig={exportConfig}
                   isExporting={isExporting}
                   onExportStart={() => setIsExporting(true)}
@@ -216,7 +282,6 @@ function UploadProgress({
   hasDark: boolean;
 }) {
   const count = (hasLight ? 1 : 0) + (hasDark ? 1 : 0);
-
   if (count === 2) return null;
 
   return (
@@ -227,7 +292,6 @@ function UploadProgress({
         border: "1px solid var(--color-border)",
       }}
     >
-      {/* Mini progress bar */}
       <div
         className="flex-1 h-1 rounded-full overflow-hidden"
         style={{ background: "var(--color-border)" }}
@@ -253,26 +317,25 @@ function UploadProgress({
 
 // ─── Usage Tip ────────────────────────────────────────────────────────────────
 
-function UsageTip({
-  format,
-  filename,
-}: {
-  format: string;
-  filename: string;
-}) {
+function UsageTip({ format, filename }: { format: string; filename: string }) {
   const mdSnippet = `![Preview](./${filename}.${format})`;
+  const [copied, setCopied] = useState(false);
 
   function handleCopy() {
     try {
-      navigator.clipboard.writeText(mdSnippet);
+      navigator.clipboard.writeText(mdSnippet).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
     } catch {
-      // fallback
       const el = document.createElement("textarea");
       el.value = mdSnippet;
       document.body.appendChild(el);
       el.select();
       document.execCommand("copy");
       document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   }
 
@@ -300,7 +363,7 @@ function UsageTip({
           aria-label="复制 Markdown 代码"
           className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-md text-[var(--color-primary)] hover:bg-[rgba(0,100,209,0.1)] active:bg-[rgba(0,100,209,0.18)] transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] cursor-pointer select-none"
         >
-          复制
+          {copied ? "✓ 已复制" : "复制"}
         </button>
       </div>
     </div>

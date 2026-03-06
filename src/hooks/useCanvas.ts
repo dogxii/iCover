@@ -1,12 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ExportConfig, ImageFile, SplitConfig } from "../types";
+import type {
+  BackgroundConfig,
+  ExportConfig,
+  ImageFile,
+  MockupConfig,
+  SplitConfig,
+  WatermarkConfig,
+} from "../types";
 import { drawSplitImage } from "../utils/canvas";
 
 interface UseCanvasOptions {
   images: Partial<Record<ImageFile["id"], ImageFile>>;
   splitConfig: SplitConfig;
+  background: BackgroundConfig;
+  mockup: MockupConfig;
+  watermark: WatermarkConfig;
   exportConfig: ExportConfig;
-  /** Debounce delay in ms before re-rendering (default: 80ms) */
   debounceMs?: number;
 }
 
@@ -21,6 +30,9 @@ interface UseCanvasReturn {
 export function useCanvas({
   images,
   splitConfig,
+  background,
+  mockup,
+  watermark,
   exportConfig,
   debounceMs = 80,
 }: UseCanvasOptions): UseCanvasReturn {
@@ -29,9 +41,7 @@ export function useCanvas({
   const [hasOutput, setHasOutput] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Debounce timer ref
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Abort flag to cancel stale renders
   const renderIdRef = useRef(0);
 
   const render = useCallback(async () => {
@@ -42,19 +52,14 @@ export function useCanvas({
     const hasDark = !!images.dark;
 
     if (!hasLight || !hasDark) {
-      // Clear canvas if one or both images are missing
       const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      }
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
       setHasOutput(false);
       setError(null);
       return;
     }
 
-    // Bump render ID — any previous in-flight render will be ignored
     const currentId = ++renderIdRef.current;
-
     setIsRendering(true);
     setError(null);
 
@@ -62,54 +67,34 @@ export function useCanvas({
       const result = await drawSplitImage({
         images,
         splitConfig,
-        exportConfig: {
-          ...exportConfig,
-          // Preview always renders at scale 1 for performance
-          scale: 1,
-        },
+        background,
+        mockup,
+        watermark,
+        exportConfig: { ...exportConfig, scale: 1 },
         canvas,
       });
 
-      // Discard stale renders
       if (currentId !== renderIdRef.current) return;
-
-      if (result) {
-        setHasOutput(true);
-      } else {
-        setHasOutput(false);
-      }
+      setHasOutput(!!result);
     } catch (err) {
       if (currentId !== renderIdRef.current) return;
       setError(err instanceof Error ? err.message : "Render failed");
       setHasOutput(false);
     } finally {
-      if (currentId === renderIdRef.current) {
-        setIsRendering(false);
-      }
+      if (currentId === renderIdRef.current) setIsRendering(false);
     }
-  }, [images, splitConfig, exportConfig]);
+  }, [images, splitConfig, background, mockup, watermark, exportConfig]);
 
-  // Debounced render whenever inputs change
   useEffect(() => {
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-    }
-
-    timerRef.current = setTimeout(() => {
-      render();
-    }, debounceMs);
-
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(render, debounceMs);
     return () => {
-      if (timerRef.current !== null) {
-        clearTimeout(timerRef.current);
-      }
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
     };
   }, [render, debounceMs]);
 
   const forceRender = useCallback(() => {
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-    }
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
     render();
   }, [render]);
 
