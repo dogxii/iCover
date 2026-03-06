@@ -154,7 +154,7 @@ export function Header() {
         >
           {/* GitHub link */}
           <a
-            href="https://github.com/dogxi/icover"
+            href="https://github.com/dogxii/icover"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="在 GitHub 上查看源码"
